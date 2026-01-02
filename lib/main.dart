@@ -1,8 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:ridesync/Registration.dart';
-import 'package:ridesync/liftservices.dart';
-import 'package:ridesync/login.dart';
-import 'package:ridesync/nearbycabs.dart';
+import 'package:ridesync/user/Registration.dart';
+import 'package:ridesync/user/busdetails.dart';
+import 'package:ridesync/user/profile.dart';
+import 'package:ridesync/vehicle%20owner/RegistrationOwner.dart';
+import 'package:ridesync/vehicle%20owner/complaint.dart';
+import 'package:ridesync/vehicle%20owner/feedback.dart';
+import 'package:ridesync/user/home.dart';
+import 'package:ridesync/user/liftservices.dart';
+import 'package:ridesync/user/login.dart';
+import 'package:ridesync/user/nearbycabs.dart';
+import 'package:ridesync/user/replay.dart';
+import 'package:ridesync/user/sendcomplaint.dart';
+import 'package:ridesync/vehicle%20owner/bookingmanagement.dart';
+import 'package:ridesync/vehicle%20owner/home.dart';
+import 'package:ridesync/vehicle%20owner/managevehicle.dart';
+import 'package:ridesync/vehicle%20owner/profile.dart';
+import 'package:ridesync/vehicle%20owner/viewbookinghistory.dart';
+import 'package:ridesync/user/viewfeedback.dart';
+import 'package:ridesync/vehicle%20owner/viewreplay.dart';
 
 void main() {
   runApp(const MyApp());
@@ -34,7 +49,7 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: LiftServiceHome(),
+      home:UserHomePage(),
     );
   }
 }

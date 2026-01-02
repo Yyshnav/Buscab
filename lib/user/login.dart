@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:ridesync/Registration.dart';
+import 'package:ridesync/user/Registration.dart';
 
 class loginscreen extends StatefulWidget {
   const loginscreen({super.key});

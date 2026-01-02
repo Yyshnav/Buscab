@@ -47,6 +47,7 @@ class _LiftServiceHomeState extends State<LiftServiceHome> {
       "completed": false,
       "rated": false,
       "rating": 0.0,
+      "feedback": "",
     },
     {
       "driver": "Nikhil Menon",
@@ -60,6 +61,7 @@ class _LiftServiceHomeState extends State<LiftServiceHome> {
       "completed": false,
       "rated": false,
       "rating": 0.0,
+      "feedback": "",
     },
   ];
 
@@ -144,6 +146,23 @@ class _LiftServiceHomeState extends State<LiftServiceHome> {
                         Text("Driver: ${lift["driver"]}", style: TextStyle(fontWeight: FontWeight.bold)),
                         Text("Vehicle: ${lift["vehicle"]}"),
                         Text("Pickup: ${lift["pickup"]} → Drop: ${lift["drop"]}"),
+                        if (lift["completed"] && lift["rated"]) ...[
+                          SizedBox(height: 8),
+                          Row(
+                            children: List.generate(5, (i) {
+                              return Icon(
+                                i < lift["rating"] ? Icons.star : Icons.star_border,
+                                color: Colors.orange,
+                                size: 20,
+                              );
+                            }),
+                          ),
+                          if ((lift["feedback"] ?? "").isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Text("Feedback: ${lift["feedback"]}", style: TextStyle(fontStyle: FontStyle.italic)),
+                            ),
+                        ],
                         SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -177,60 +196,108 @@ class _LiftServiceHomeState extends State<LiftServiceHome> {
                         if (!lift["completed"])
                           ElevatedButton(
                             onPressed: () {
-                              setState(() {
-                                lift["completed"] = true;
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text("Ride marked as completed. You can now rate the driver.")));
+                              // Step 1: Show confirmation dialog
+                              showDialog(
+                                context: context,
+                                builder: (context) {
+                                  return AlertDialog(
+                                    title: Text("Complete Ride"),
+                                    content: Text("Are you sure you want to complete this ride?"),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.pop(context); // Cancel
+                                        },
+                                        child: Text("Cancel"),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.pop(context); // Close confirmation
+
+                                          // Step 2: Mark ride as completed
+                                          setState(() {
+                                            lift["completed"] = true;
+                                          });
+
+                                          // Step 3: Show rating + feedback dialog
+                                          double tempRating = 0;
+                                          TextEditingController feedbackController = TextEditingController();
+
+                                          showDialog(
+                                            context: context,
+                                            builder: (context) {
+                                              return StatefulBuilder(
+                                                builder: (context, setDialogState) {
+                                                  return AlertDialog(
+                                                    title: Text("Rate ${lift["driver"]}"),
+                                                    content: Column(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Row(
+                                                          mainAxisAlignment: MainAxisAlignment.center,
+                                                          children: List.generate(5, (index) {
+                                                            return IconButton(
+                                                              icon: Icon(
+                                                                index < tempRating
+                                                                    ? Icons.star
+                                                                    : Icons.star_border,
+                                                                color: Colors.orange,
+                                                                size: 30,
+                                                              ),
+                                                              onPressed: () {
+                                                                setDialogState(() {
+                                                                  tempRating = index + 1.0;
+                                                                });
+                                                              },
+                                                            );
+                                                          }),
+                                                        ),
+                                                        SizedBox(height: 10),
+                                                        TextField(
+                                                          controller: feedbackController,
+                                                          maxLines: 3,
+                                                          decoration: InputDecoration(
+                                                            hintText: "write a feedback",
+                                                            border: OutlineInputBorder(),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () {
+                                                          setState(() {
+                                                            lift["rating"] = tempRating;
+                                                            lift["feedback"] =
+                                                                feedbackController.text;
+                                                            lift["rated"] = true;
+                                                          });
+                                                          Navigator.pop(context);
+                                                          ScaffoldMessenger.of(context).showSnackBar(
+                                                            SnackBar(
+                                                              content: Text(
+                                                                  "Rated ${lift["driver"]} $tempRating stars${feedbackController.text.isNotEmpty ? " with feedback" : ""}"),
+                                                            ),
+                                                          );
+                                                        },
+                                                        child: Text("Submit"),
+                                                      )
+                                                    ],
+                                                  );
+                                                },
+                                              );
+                                            },
+                                          );
+                                        },
+                                        child: Text("Confirm"),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
                             },
                             child: Text("Complete Ride"),
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                          ),
-                        if (lift["completed"] && !lift["rated"])
-                          ElevatedButton(
-                            onPressed: () {
-                              showDialog(
-                                  context: context,
-                                  builder: (context) {
-                                    double tempRating = 0;
-                                    return AlertDialog(
-                                      title: Text("Rate ${lift["driver"]}"),
-                                      content: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: List.generate(5, (index) {
-                                          return IconButton(
-                                            icon: Icon(
-                                              index < tempRating ? Icons.star : Icons.star_border,
-                                              color: Colors.orange,
-                                              size: 30,
-                                            ),
-                                            onPressed: () {
-                                              setState(() {
-                                                tempRating = index + 1.0;
-                                              });
-                                            },
-                                          );
-                                        }),
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () {
-                                            setState(() {
-                                              lift["rating"] = tempRating;
-                                              lift["rated"] = true;
-                                            });
-                                            Navigator.pop(context);
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(content: Text("Rated ${lift["driver"]} $tempRating stars")));
-                                          },
-                                          child: Text("Submit"),
-                                        )
-                                      ],
-                                    );
-                                  });
-                            },
-                            child: Text("Rate Driver"),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
                           ),
                       ],
                     ),
@@ -240,7 +307,7 @@ class _LiftServiceHomeState extends State<LiftServiceHome> {
         ),
       ),
 
-      // ----------------- 2: Drivers Tab (no call option externally) -----------------
+      // ----------------- 2: Drivers Tab -----------------
       SingleChildScrollView(
         padding: EdgeInsets.all(12),
         child: Column(
@@ -253,7 +320,6 @@ class _LiftServiceHomeState extends State<LiftServiceHome> {
                     leading: Icon(Icons.person, size: 40, color: Colors.blue),
                     title: Text(lift["driver"]),
                     subtitle: Text("${lift["vehicle"]} | ${lift["pickup"]} → ${lift["drop"]}"),
-                    // Call button removed here
                   ),
                 )),
           ],
