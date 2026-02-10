@@ -1,71 +1,117 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ridesync/api/api_service.dart';
 
+class ReplayPage extends StatefulWidget {
+  @override
+  State<ReplayPage> createState() => _ReplayPageState();
+}
 
+class _ReplayPageState extends State<ReplayPage> {
+  List<dynamic> complaints = [];
+  bool isLoading = true;
 
-class ReplayPage extends StatelessWidget {
- 
-  // Sample complaint replays from admin
-  List<Map<String, String>> replays = [
-    {
-      "complaint": "Bike not available on time",
-      "reply": "We apologize for the inconvenience. We'll ensure timely service next time.",
-      "date": "01-01-2026"
-    },
-    {
-      "complaint": "Vehicle was dirty",
-      "reply": "Thank you for the feedback. We'll maintain cleanliness in future rides.",
-      "date": "03-01-2026"
-    },
-    {
-      "complaint": "Payment issue",
-      "reply": "Issue resolved. Please check your account for confirmation.",
-      "date": "04-01-2026"
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchComplaints();
+  }
+
+  Future<void> _fetchComplaints() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final loginId = prefs.getInt('login_id');
+      if (loginId != null) {
+        final response = await ApiService.getOwnerComplaints(loginId);
+        if (response.statusCode == 200) {
+          setState(() {
+            complaints = response.data;
+            isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print("Error fetching complaints: $e");
+      setState(() => isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.blue.shade700,
-        title: Center(
-          child: Text(
-            "Admin Replies",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
+        title: const Text(
+          "Admin Replies",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         elevation: 0,
       ),
-      body: replays.isEmpty
-          ? Center(child: Text("No replies from admin yet"))
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : complaints.isEmpty
+          ? const Center(child: Text("No complaints or replies found"))
           : ListView.builder(
-              padding: EdgeInsets.all(16),
-              itemCount: replays.length,
+              padding: const EdgeInsets.all(16),
+              itemCount: complaints.length,
               itemBuilder: (context, index) {
-                var replay = replays[index];
+                var item = complaints[index];
                 return Card(
-                  elevation: 2,
-                  margin: EdgeInsets.symmetric(vertical: 8),
+                  elevation: 3,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Padding(
-                    padding: EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          "Complaint:",
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        const Text(
+                          "Your Complaint:",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blueGrey,
+                          ),
                         ),
-                        Text("${replay['complaint']}"),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 4),
                         Text(
+                          "${item['complaint']}",
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        const Divider(height: 24),
+                        const Text(
                           "Admin Reply:",
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
                         ),
-                        Text("${replay['reply']}"),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 4),
                         Text(
-                          "Date: ${replay['date']}",
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                          item['replay']?.isEmpty ?? true
+                              ? "Pending reply from admin..."
+                              : "${item['replay']}",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontStyle: item['replay']?.isEmpty ?? true
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                            color: item['replay']?.isEmpty ?? true
+                                ? Colors.grey
+                                : Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.bottomRight,
+                          child: Text(
+                            "Date: ${item['date']}",
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
+                            ),
+                          ),
                         ),
                       ],
                     ),

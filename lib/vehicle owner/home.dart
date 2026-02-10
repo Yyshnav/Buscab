@@ -8,6 +8,7 @@ import 'complaint.dart';
 import 'viewreplay.dart';
 import 'feedback.dart';
 import 'profile.dart'; // ✅ Profile page
+import '../user/notifications.dart'; // Notification Screen
 
 void main() {
   runApp(
@@ -27,10 +28,7 @@ class VehicleOwnerHomePage extends StatelessWidget {
         centerTitle: true,
         title: Text(
           "Vehicle Owner Home",
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
@@ -41,6 +39,18 @@ class VehicleOwnerHomePage extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => VehicleOwnerProfilePage(),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.notifications, color: Colors.white),
+            tooltip: "Notifications",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotificationScreen(),
                 ),
               );
             },
@@ -63,7 +73,8 @@ class VehicleOwnerHomePage extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (context) => VehicleManagementPage()),
+                      builder: (context) => VehicleManagementPage(),
+                    ),
                   );
                 },
               ),
@@ -75,7 +86,8 @@ class VehicleOwnerHomePage extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (context) => BookingRequestsPage()),
+                      builder: (context) => BookingRequestsPage(),
+                    ),
                   );
                 },
               ),
@@ -86,8 +98,7 @@ class VehicleOwnerHomePage extends StatelessWidget {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                        builder: (context) => Historypage()),
+                    MaterialPageRoute(builder: (context) => Historypage()),
                   );
                 },
               ),
@@ -99,7 +110,8 @@ class VehicleOwnerHomePage extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (context) => ComplaintPagevehicle()),
+                      builder: (context) => ComplaintPagevehicle(),
+                    ),
                   );
                 },
               ),
@@ -121,8 +133,20 @@ class VehicleOwnerHomePage extends StatelessWidget {
                 onTap: () {
                   Navigator.push(
                     context,
+                    MaterialPageRoute(builder: (context) => ViewFeedbackPage()),
+                  );
+                },
+              ),
+              _buildCard(
+                context,
+                icon: Icons.notifications_active,
+                label: "Notifications",
+                onTap: () {
+                  Navigator.push(
+                    context,
                     MaterialPageRoute(
-                        builder: (context) => ViewFeedbackPage()),
+                      builder: (context) => const NotificationScreen(),
+                    ),
                   );
                 },
               ),
@@ -144,9 +168,7 @@ class VehicleOwnerHomePage extends StatelessWidget {
       onTap: onTap,
       child: Card(
         elevation: 3,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Container(
           padding: EdgeInsets.all(16),
           child: Column(

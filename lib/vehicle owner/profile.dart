@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ridesync/api/api_service.dart';
+import 'package:ridesync/user/login.dart';
 
 class VehicleOwnerProfilePage extends StatefulWidget {
   @override
@@ -9,92 +12,109 @@ class VehicleOwnerProfilePage extends StatefulWidget {
 class _VehicleOwnerProfilePageState extends State<VehicleOwnerProfilePage> {
   final _formKey = GlobalKey<FormState>();
 
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Logout"),
+        content: const Text("Are you sure you want to logout?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => _logout(),
+            child: const Text("Logout", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const loginscreen()),
+        (route) => false,
+      );
+    }
+  }
+
   // Profile Info
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _licenseController = TextEditingController();
   final _adharController = TextEditingController();
+  final _vehicleNoController = TextEditingController();
 
-  // Multiple vehicles
-  List<TextEditingController> _vehicleControllers = [TextEditingController()];
-
-  // ID Proof
-  String idProofType = "Aadhaar Card";
-  bool idProofUploaded = false;
-
-  // Profile image
-  bool profileUploaded = false;
+  bool isLoading = true;
 
   @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _licenseController.dispose();
-    _adharController.dispose();
-    _vehicleControllers.forEach((c) => c.dispose());
-    super.dispose();
+  void initState() {
+    super.initState();
+    _fetchProfile();
   }
 
-  // Simulate profile image upload
-  void _pickProfileImage() {
-    setState(() {
-      profileUploaded = true;
-    });
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text("Profile photo uploaded")));
-  }
+  Future<void> _fetchProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final loginId = prefs.getInt('login_id');
 
-  // Simulate ID proof upload
-  void _pickIDProof() {
-    setState(() {
-      idProofUploaded = true;
-    });
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text("$idProofType uploaded")));
-  }
-
-  void _addVehicleField() {
-    setState(() {
-      _vehicleControllers.add(TextEditingController());
-    });
-  }
-
-  void _removeVehicleField(int index) {
-    if (_vehicleControllers.length > 1) {
-      _vehicleControllers[index].dispose();
-      setState(() {
-        _vehicleControllers.removeAt(index);
-      });
+      if (loginId != null) {
+        final response = await ApiService.getOwnerProfile(loginId);
+        if (response.statusCode == 200) {
+          final data = response.data;
+          setState(() {
+            _nameController.text = data['name'] ?? "";
+            _emailController.text = data['email'] ?? "";
+            _phoneController.text = data['mobile_number']?.toString() ?? "";
+            _licenseController.text = data['driving_licence'] ?? "";
+            _adharController.text = data['aadhaar_number']?.toString() ?? "";
+            _vehicleNoController.text = data['Vehicle_no'] ?? "";
+            isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print("Error fetching profile: $e");
+      setState(() => isLoading = false);
     }
   }
 
-  // Submit form with mandatory checks
-  void _submitProfile() {
+  Future<void> _submitProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (!profileUploaded) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Please upload a profile photo")));
-      return;
-    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final loginId = prefs.getInt('login_id');
 
-    if (_adharController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Please enter your Aadhaar number")));
-      return;
-    }
+      if (loginId != null) {
+        final data = {
+          "name": _nameController.text,
+          "email": _emailController.text,
+          "mobile_number": int.tryParse(_phoneController.text),
+          "driving_licence": _licenseController.text,
+          "aadhaar_number": int.tryParse(_adharController.text),
+          "Vehicle_no": _vehicleNoController.text,
+        };
 
-    if (!idProofUploaded) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Please upload your ID proof")));
-      return;
+        final response = await ApiService.updateOwnerProfile(loginId, data);
+        if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Profile updated successfully!")),
+          );
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Failed to update profile")));
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Profile submitted successfully!")),
-    );
   }
 
   @override
@@ -102,145 +122,84 @@ class _VehicleOwnerProfilePageState extends State<VehicleOwnerProfilePage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.blue.shade700,
-        title: Center(
-          child: Text(
-            "Profile",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
+        title: const Text(
+          "Profile",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
+            onPressed: () => _showLogoutDialog(),
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              // Profile avatar
-              CircleAvatar(
-                radius: 60,
-                backgroundColor:
-                    profileUploaded ? Colors.green.shade700 : Colors.blue.shade700,
-                child: profileUploaded
-                    ? Text("✅", style: TextStyle(fontSize: 40, color: Colors.white))
-                    : Icon(Icons.person, size: 60, color: Colors.white),
-              ),
-              SizedBox(height: 8),
-              Text("Upload a portrait photo"),
-              SizedBox(height: 6),
-              ElevatedButton.icon(
-                icon: Icon(Icons.upload_file),
-                label: Text(profileUploaded
-                    ? "Change Profile Photo"
-                    : "Upload Profile Photo"),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade700),
-                onPressed: _pickProfileImage,
-              ),
-              SizedBox(height: 20),
-
-              // Name, Email, Phone
-              _buildTextField("Name", _nameController),
-              _buildTextField("Email", _emailController,
-                  keyboardType: TextInputType.emailAddress),
-              _buildTextField("Phone", _phoneController,
-                  keyboardType: TextInputType.phone),
-
-              // License number
-              _buildTextField("Driving Licence Number", _licenseController),
-
-              // Vehicle numbers (dynamic)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Vehicle Numbers",
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  ..._vehicleControllers.asMap().entries.map((entry) {
-                    int idx = entry.key;
-                    TextEditingController controller = entry.value;
-                    return Row(
-                      children: [
-                        Expanded(
-                            child:
-                                _buildTextField("Vehicle Number ${idx + 1}", controller)),
-                        if (_vehicleControllers.length > 1)
-                          IconButton(
-                            icon: Icon(Icons.remove_circle, color: Colors.red),
-                            onPressed: () => _removeVehicleField(idx),
-                          ),
-                      ],
-                    );
-                  }).toList(),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      icon: Icon(Icons.add),
-                      label: Text("Add Vehicle"),
-                      onPressed: _addVehicleField,
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    const CircleAvatar(
+                      radius: 60,
+                      backgroundColor: Colors.blue,
+                      child: Icon(Icons.person, size: 60, color: Colors.white),
                     ),
-                  ),
-                ],
-              ),
-
-              // Aadhaar number
-              _buildTextField("Aadhaar Number", _adharController,
-                  keyboardType: TextInputType.number, isRequired: true),
-
-              // ID proof
-              SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: idProofType,
-                decoration: InputDecoration(
-                  labelText: "Select ID Proof Type",
-                  border: OutlineInputBorder(),
-                ),
-                items: ["Aadhaar Card", "Driving Licence", "Passport", "Voter ID"]
-                    .map((e) =>
-                        DropdownMenuItem<String>(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) {
-                    setState(() {
-                      idProofType = v;
-                    });
-                  }
-                },
-              ),
-              SizedBox(height: 6),
-              ElevatedButton.icon(
-                icon: Icon(Icons.upload_file),
-                label: Text(idProofUploaded
-                    ? "$idProofType ✅"
-                    : "$idProofType"),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade700),
-                onPressed: _pickIDProof,
-              ),
-
-              SizedBox(height: 20),
-              // Submit button
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade700),
-                  onPressed: _submitProfile,
-                  child: Text("Submit Profile",
-                      style: TextStyle(color: Colors.white)),
+                    const SizedBox(height: 20),
+                    _buildTextField("Name", _nameController),
+                    _buildTextField(
+                      "Email",
+                      _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    _buildTextField(
+                      "Phone",
+                      _phoneController,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    _buildTextField(
+                      "Driving Licence Number",
+                      _licenseController,
+                    ),
+                    _buildTextField("Vehicle Number", _vehicleNoController),
+                    _buildTextField(
+                      "Aadhaar Number",
+                      _adharController,
+                      keyboardType: TextInputType.number,
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade700,
+                        ),
+                        onPressed: _submitProfile,
+                        child: const Text(
+                          "Update Profile",
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
-  // TextField builder
-  Widget _buildTextField(String label, TextEditingController controller,
-      {TextInputType keyboardType = TextInputType.text, bool isRequired = false}) {
+  Widget _buildTextField(
+    String label,
+    TextEditingController controller, {
+    TextInputType keyboardType = TextInputType.text,
+    bool isRequired = false,
+  }) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
@@ -252,7 +211,7 @@ class _VehicleOwnerProfilePageState extends State<VehicleOwnerProfilePage> {
         },
         decoration: InputDecoration(
           labelText: isRequired ? "$label (Required)" : label,
-          border: OutlineInputBorder(),
+          border: const OutlineInputBorder(),
         ),
       ),
     );

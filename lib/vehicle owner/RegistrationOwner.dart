@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:ridesync/api/api_service.dart';
+import 'package:ridesync/user/login.dart';
 
 void main() {
-  runApp(MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: VehicleOwnerRegistrationPage(),
-  ));
+  runApp(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: VehicleOwnerRegistrationPage(),
+    ),
+  );
 }
 
 class VehicleOwnerRegistrationPage extends StatefulWidget {
   @override
-  State<VehicleOwnerRegistrationPage> createState() => _VehicleOwnerRegistrationPageState();
+  State<VehicleOwnerRegistrationPage> createState() =>
+      _VehicleOwnerRegistrationPageState();
 }
 
-class _VehicleOwnerRegistrationPageState extends State<VehicleOwnerRegistrationPage> {
+class _VehicleOwnerRegistrationPageState
+    extends State<VehicleOwnerRegistrationPage> {
   final _formKey = GlobalKey<FormState>();
 
   final _nameController = TextEditingController();
@@ -24,19 +30,36 @@ class _VehicleOwnerRegistrationPageState extends State<VehicleOwnerRegistrationP
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
-  void registerOwner() {
+  void registerOwner() async {
     if (_formKey.currentState!.validate()) {
-      // Perform registration logic here (e.g., API call or local storage)
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Registration Successful")),
-      );
+      try {
+        final data = {
+          'username': _emailController.text,
+          'password': _passwordController.text,
+          'usertype': 'vehicleowner',
+          'name': _nameController.text,
+          'mobile_number': int.parse(_phoneController.text),
+          'email': _emailController.text,
+          'driving_licence': '',
+          'aadhaar_number': 0,
+          'Vehicle_no': '',
+        };
 
-      // Clear fields
-      _nameController.clear();
-      _emailController.clear();
-      _phoneController.clear();
-      _passwordController.clear();
-      _confirmPasswordController.clear();
+        final response = await ApiService.registerOwner(data);
+        if (response.statusCode == 201) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Registration Successful!")),
+          );
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const loginscreen()),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Registration Failed: $e")));
+      }
     }
   }
 
@@ -68,7 +91,8 @@ class _VehicleOwnerRegistrationPageState extends State<VehicleOwnerRegistrationP
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.person),
                 ),
-                validator: (value) => value!.isEmpty ? "Please enter your name" : null,
+                validator: (value) =>
+                    value!.isEmpty ? "Please enter your name" : null,
               ),
               SizedBox(height: 10),
 
@@ -81,7 +105,16 @@ class _VehicleOwnerRegistrationPageState extends State<VehicleOwnerRegistrationP
                   prefixIcon: Icon(Icons.email),
                 ),
                 keyboardType: TextInputType.emailAddress,
-                validator: (value) => value!.isEmpty ? "Please enter your email" : null,
+                validator: (value) {
+                  if (value == null || value.isEmpty)
+                    return "Please enter your email";
+                  final emailRegex = RegExp(
+                    r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                  );
+                  if (!emailRegex.hasMatch(value))
+                    return "Please enter a valid email address";
+                  return null;
+                },
               ),
               SizedBox(height: 10),
 
@@ -94,7 +127,13 @@ class _VehicleOwnerRegistrationPageState extends State<VehicleOwnerRegistrationP
                   prefixIcon: Icon(Icons.phone),
                 ),
                 keyboardType: TextInputType.phone,
-                validator: (value) => value!.isEmpty ? "Please enter your phone number" : null,
+                validator: (value) {
+                  if (value == null || value.isEmpty)
+                    return "Please enter your phone number";
+                  if (!RegExp(r'^[0-9]{10}$').hasMatch(value))
+                    return "Please enter a valid 10-digit phone number";
+                  return null;
+                },
               ),
               SizedBox(height: 10),
 
@@ -107,7 +146,11 @@ class _VehicleOwnerRegistrationPageState extends State<VehicleOwnerRegistrationP
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.lock),
                   suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                    ),
                     onPressed: () {
                       setState(() {
                         _obscurePassword = !_obscurePassword;
@@ -115,7 +158,13 @@ class _VehicleOwnerRegistrationPageState extends State<VehicleOwnerRegistrationP
                     },
                   ),
                 ),
-                validator: (value) => value!.isEmpty ? "Please enter a password" : null,
+                validator: (value) {
+                  if (value == null || value.isEmpty)
+                    return "Please enter a password";
+                  if (value.length < 8)
+                    return "Password must be at least 8 characters";
+                  return null;
+                },
               ),
               SizedBox(height: 10),
 
@@ -128,7 +177,11 @@ class _VehicleOwnerRegistrationPageState extends State<VehicleOwnerRegistrationP
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.lock),
                   suffixIcon: IconButton(
-                    icon: Icon(_obscureConfirmPassword ? Icons.visibility : Icons.visibility_off),
+                    icon: Icon(
+                      _obscureConfirmPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                    ),
                     onPressed: () {
                       setState(() {
                         _obscureConfirmPassword = !_obscureConfirmPassword;
@@ -138,7 +191,8 @@ class _VehicleOwnerRegistrationPageState extends State<VehicleOwnerRegistrationP
                 ),
                 validator: (value) {
                   if (value!.isEmpty) return "Please confirm your password";
-                  if (value != _passwordController.text) return "Passwords do not match";
+                  if (value != _passwordController.text)
+                    return "Passwords do not match";
                   return null;
                 },
               ),
@@ -149,11 +203,16 @@ class _VehicleOwnerRegistrationPageState extends State<VehicleOwnerRegistrationP
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade700,
+                  ),
                   onPressed: registerOwner,
                   child: Text(
                     "Register",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),

@@ -1,111 +1,144 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ridesync/api/api_service.dart';
 
-class ViewFeedbackPage extends StatelessWidget {
-  // Dummy feedback data (replace with backend later)
-  final List<Map<String, dynamic>> feedbackList = [
-    {
-      "user": "Rahul",
-      "feedback": "Very smooth ride and polite driver.",
-      "rating": 5,
-      "date": "01 Jan 2026"
-    },
-    {
-      "user": "Anjali",
-      "feedback": "Vehicle was clean but arrived a bit late.",
-      "rating": 4,
-      "date": "30 Dec 2025"
-    },
-    {
-      "user": "Akhil",
-      "feedback": "Good service, will book again!",
-      "rating": 5,
-      "date": "28 Dec 2025"
-    },
-  ];
+class ViewFeedbackPage extends StatefulWidget {
+  @override
+  State<ViewFeedbackPage> createState() => _ViewFeedbackPageState();
+}
+
+class _ViewFeedbackPageState extends State<ViewFeedbackPage> {
+  List<dynamic> feedbacks = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFeedback();
+  }
+
+  Future<void> _fetchFeedback() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final loginId = prefs.getInt('login_id');
+
+      if (loginId != null) {
+        final response = await ApiService.getOwnerFeedback(loginId);
+        if (response.statusCode == 200) {
+          setState(() {
+            feedbacks = response.data;
+            isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print("Error fetching feedback: $e");
+      setState(() => isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.blue.shade700,
-        centerTitle: true,
-        title: Text(
-          "User Feedback",
+        title: const Text(
+          "User Feedback & Ratings",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
+        elevation: 0,
       ),
-      body: feedbackList.isEmpty
-          ? Center(
-              child: Text(
-                "No feedback available",
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-            )
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : feedbacks.isEmpty
+          ? const Center(child: Text("No feedback received yet"))
           : ListView.builder(
-              padding: EdgeInsets.all(16),
-              itemCount: feedbackList.length,
+              padding: const EdgeInsets.all(16),
+              itemCount: feedbacks.length,
               itemBuilder: (context, index) {
-                final feedback = feedbackList[index];
-
+                var feedback = feedbacks[index];
                 return Card(
-                  elevation: 3,
-                  margin: EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                  elevation: 2,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
                   child: Padding(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // User & Date
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            CircleAvatar(
-                              backgroundColor: Colors.blue.shade700,
-                              child: Icon(Icons.person, color: Colors.white),
-                            ),
-                            SizedBox(width: 10),
                             Text(
-                              feedback["user"],
-                              style: TextStyle(
+                              feedback['student_name'] ?? "Anonymous User",
+                              style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
+                                color: Colors.blue,
                               ),
                             ),
-                            Spacer(),
                             Text(
-                              feedback["date"],
+                              feedback['date'] ?? "",
                               style: TextStyle(
+                                color: Colors.grey.shade600,
                                 fontSize: 12,
-                                color: Colors.grey,
                               ),
                             ),
                           ],
                         ),
-
-                        SizedBox(height: 8),
-
-                        // ⭐ Rating Row
+                        const SizedBox(height: 8),
                         Row(
-                          children: List.generate(
-                            5,
-                            (starIndex) => Icon(
-                              starIndex < feedback["rating"]
-                                  ? Icons.star
-                                  : Icons.star_border,
-                              color: Colors.amber,
-                              size: 20,
+                          children: [
+                            Row(
+                              children: List.generate(
+                                5,
+                                (i) => Icon(
+                                  Icons.star,
+                                  color: i < (feedback['rating'] ?? 0)
+                                      ? Colors.amber
+                                      : Colors.grey.shade300,
+                                  size: 18,
+                                ),
+                              ),
                             ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "(${feedback['rating']})",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          "REVIEW:",
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                            letterSpacing: 1.1,
                           ),
                         ),
-
-                        SizedBox(height: 10),
-
-                        // Feedback text
+                        const SizedBox(height: 4),
                         Text(
-                          feedback["feedback"],
-                          style: TextStyle(fontSize: 14),
+                          feedback['review'] != null &&
+                                  feedback['review'].isNotEmpty
+                              ? feedback['review']
+                              : "No detailed comment provided",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontStyle:
+                                feedback['review'] != null &&
+                                    feedback['review'].isNotEmpty
+                                ? FontStyle.normal
+                                : FontStyle.italic,
+                            color:
+                                feedback['review'] != null &&
+                                    feedback['review'].isNotEmpty
+                                ? Colors.black87
+                                : Colors.grey,
+                          ),
                         ),
                       ],
                     ),

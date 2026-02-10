@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-
-
+import 'package:ridesync/api/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ComplaintPage extends StatefulWidget {
   @override
@@ -19,24 +19,35 @@ class _ComplaintPageState extends State<ComplaintPage> {
     });
   }
 
-  void _submitComplaint() {
+  void _submitComplaint() async {
     if (_titleController.text.isEmpty || _descriptionController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Please fill all fields")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Complaint submitted successfully")),
-    );
-
-    // Clear fields
-    _titleController.clear();
-    _descriptionController.clear();
-    setState(() {
-      attachment = "";
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('user_id') ?? 1;
+      final data = {
+        'complaint': "${_titleController.text}: ${_descriptionController.text}",
+        'user_id': userId,
+      };
+      await ApiService.submitComplaint(data);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Complaint submitted successfully")),
+      );
+      _titleController.clear();
+      _descriptionController.clear();
+      setState(() {
+        attachment = "";
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed to submit complaint: $e")));
+    }
   }
 
   @override
@@ -76,7 +87,8 @@ class _ComplaintPageState extends State<ComplaintPage> {
             OutlinedButton.icon(
               icon: Icon(Icons.upload_file),
               label: Text(
-                  attachment.isEmpty ? "Attach File (Optional)" : "$attachment ✅"),
+                attachment.isEmpty ? "Attach File (Optional)" : "$attachment ✅",
+              ),
               onPressed: _pickAttachment,
             ),
             SizedBox(height: 20),
@@ -84,11 +96,16 @@ class _ComplaintPageState extends State<ComplaintPage> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade700,
+                ),
                 onPressed: _submitComplaint,
                 child: Text(
                   "Submit Complaint",
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),

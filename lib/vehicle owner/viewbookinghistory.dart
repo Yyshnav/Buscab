@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-
-
+import 'package:shared_preferences/shared_preferences.dart';
+import '../api/api_service.dart';
 
 class Historypage extends StatefulWidget {
   @override
@@ -8,33 +8,33 @@ class Historypage extends StatefulWidget {
 }
 
 class _HistorypageState extends State<Historypage> {
-  // Sample booking history data
-  List<Map<String, String>> bookingHistory = [
-    {
-      "client": "John Doe",
-      "pickup": "City Center",
-      "drop": "Airport",
-      "date": "28-12-2025",
-      "time": "10:00 AM",
-      "status": "Accepted"
-    },
-    {
-      "client": "Jane Smith",
-      "pickup": "Station",
-      "drop": "Mall",
-      "date": "29-12-2025",
-      "time": "02:00 PM",
-      "status": "Rejected"
-    },
-    {
-      "client": "Michael Johnson",
-      "pickup": "University",
-      "drop": "Hotel",
-      "date": "30-12-2025",
-      "time": "11:30 AM",
-      "status": "Accepted"
-    },
-  ];
+  List<dynamic> bookingHistory = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchHistory();
+  }
+
+  Future<void> _fetchHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final loginId = prefs.getInt('login_id');
+      if (loginId != null) {
+        final response = await ApiService.getOwnerBookings(loginId);
+        setState(() {
+          bookingHistory = response.data;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() => isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed to fetch history: $e")));
+    }
+  }
 
   Color _getStatusColor(String status) {
     switch (status) {
@@ -50,59 +50,79 @@ class _HistorypageState extends State<Historypage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Blue AppBar with centered title
       appBar: AppBar(
         backgroundColor: Colors.blue.shade700,
-        title: Center(
-          child: Text(
-            "Booking History",
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+        centerTitle: true,
+        title: Text(
+          "Booking History",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         elevation: 0,
       ),
-      body: bookingHistory.isEmpty
-          ? Center(child: Text("No booking history"))
-          : ListView.builder(
-              padding: EdgeInsets.all(16),
-              itemCount: bookingHistory.length,
-              itemBuilder: (context, index) {
-                var booking = bookingHistory[index];
-                return Card(
-                  color: Colors.blue.shade50,
-                  elevation: 2,
-                  margin: EdgeInsets.symmetric(vertical: 8),
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Client: ${booking['client']}",
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                        SizedBox(height: 4),
-                        Text("Pickup: ${booking['pickup']}"),
-                        Text("Drop: ${booking['drop']}"),
-                        SizedBox(height: 4),
-                        Text("Date: ${booking['date']} | Time: ${booking['time']}"),
-                        SizedBox(height: 6),
-                        Text(
-                          "Status: ${booking['status']}",
-                          style: TextStyle(
-                            color: _getStatusColor(booking['status']!),
-                            fontWeight: FontWeight.bold,
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : bookingHistory.isEmpty
+          ? const Center(child: Text("No booking history"))
+          : RefreshIndicator(
+              onRefresh: _fetchHistory,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: bookingHistory.length,
+                itemBuilder: (context, index) {
+                  var booking = bookingHistory[index];
+                  String clientName = booking['user_details'] != null
+                      ? booking['user_details']['name']
+                      : "Unknown Client";
+                  String pickup = booking['vehicle_no'] != null
+                      ? booking['vehicle_no']['pickup_location']
+                      : "Unknown";
+                  String drop = booking['vehicle_no'] != null
+                      ? booking['vehicle_no']['drop_location']
+                      : "Unknown";
+
+                  return Card(
+                    color: Colors.blue.shade50,
+                    elevation: 2,
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Client: $clientName",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          Text("Pickup: $pickup"),
+                          Text("Drop: $drop"),
+                          const SizedBox(height: 4),
+                          Text(
+                            "Date: ${booking['date']} | Time: ${booking['time']}",
+                          ),
+                          if (booking['total_amount'] != null)
+                            Text(
+                              "Amount: ₹${booking['total_amount'].toString()}",
+                            ),
+                          const SizedBox(height: 6),
+                          Text(
+                            "Status: ${booking['status'] ?? 'Pending'}",
+                            style: TextStyle(
+                              color: _getStatusColor(
+                                booking['status'] ?? 'Pending',
+                              ),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
     );
   }

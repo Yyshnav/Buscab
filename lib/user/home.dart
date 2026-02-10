@@ -1,22 +1,15 @@
 import 'package:flutter/material.dart';
 
 // Import your pages
-import 'liftservices.dart';        // LiftServiceHome
-import 'nearbycabs.dart';          // NearbyCabsUI
-import 'sendcomplaint.dart';       // ComplaintPage
-import 'replay.dart';              // ViewReplyPage
-import 'viewfeedback.dart';        // FeedbackPage
-import 'profile.dart';             // UserProfilePage
-import 'busdetails.dart';          // BusDetailsPage (to be created)
-
-void main() {
-  runApp(
-    MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: UserHomePage(),
-    ),
-  );
-}
+import 'liftservices.dart'; // LiftServiceHome
+import 'nearbycabs.dart'; // NearbyCabsUI
+import 'sendcomplaint.dart'; // ComplaintPage
+import 'replay.dart'; // ViewReplyPage
+import 'viewfeedback.dart'; // FeedbackPage
+import 'profile.dart'; // UserProfilePage
+import 'busdetails.dart'; // BusDetailsPage
+import 'bookinghistory.dart'; // BookingHistoryPage
+import 'notifications.dart'; // NotificationScreen
 
 class UserHomePage extends StatelessWidget {
   @override
@@ -28,7 +21,7 @@ class UserHomePage extends StatelessWidget {
           "User Home",
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: Colors.white,       // White title
+            color: Colors.white, // White title
           ),
         ),
         centerTitle: true,
@@ -40,9 +33,17 @@ class UserHomePage extends StatelessWidget {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => UserProfilePage(),
-                ),
+                MaterialPageRoute(builder: (_) => UserProfilePage()),
+              );
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.notifications),
+            tooltip: "Notifications",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationScreen()),
               );
             },
           ),
@@ -85,7 +86,9 @@ class UserHomePage extends StatelessWidget {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => BusDetailsPage()),
+                    MaterialPageRoute(
+                      builder: (context) => const BusDetailsPage(),
+                    ),
                   );
                 },
               ),
@@ -113,12 +116,38 @@ class UserHomePage extends StatelessWidget {
               ),
               _buildCard(
                 context,
+                icon: Icons.history,
+                label: "Booking History",
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BookingHistoryPage(),
+                    ),
+                  );
+                },
+              ),
+              _buildCard(
+                context,
                 icon: Icons.feedback,
                 label: "Feedback",
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => FeedbackPage()),
+                  );
+                },
+              ),
+              _buildCard(
+                context,
+                icon: Icons.notifications_active,
+                label: "Notifications",
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationScreen(),
+                    ),
                   );
                 },
               ),

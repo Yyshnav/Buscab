@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ridesync/user/login.dart';
+import 'package:ridesync/api/api_service.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -14,10 +15,45 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   TextEditingController email = TextEditingController();
   TextEditingController password = TextEditingController();
   TextEditingController cpassword = TextEditingController();
+  TextEditingController aadhaar = TextEditingController();
+  TextEditingController licence = TextEditingController();
   final formKey = GlobalKey<FormState>();
 
   bool hidePassword = true;
   bool hideCPassword = true;
+
+  void _register() async {
+    if (formKey.currentState!.validate()) {
+      try {
+        final data = {
+          'username': email.text, // Using email as username
+          'password': password.text,
+          'usertype': 'user',
+          'name': name.text,
+          'mobile_number': int.parse(phone.text),
+          'email': email.text,
+          'driving_licence': licence.text,
+          'aadhaar_number': int.tryParse(aadhaar.text) ?? 0,
+          'Vehicle_no': '',
+        };
+
+        final response = await ApiService.register(data);
+        if (response.statusCode == 201) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Registration Successful!")),
+          );
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const loginscreen()),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Registration Failed: $e")));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +75,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               ),
               margin: const EdgeInsets.symmetric(horizontal: 20),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 30,
+                ),
                 child: Form(
                   key: formKey,
                   child: Column(
@@ -69,7 +108,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         keyboardType: TextInputType.phone,
                         validator: (value) {
                           if (value!.isEmpty) return "Enter your phone number";
-                          if (value.length != 10) return "Enter valid 10-digit number";
+                          if (value.length != 10)
+                            return "Enter valid 10-digit number";
                           return null;
                         },
                       ),
@@ -80,10 +120,33 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         icon: Icons.email,
                         keyboardType: TextInputType.emailAddress,
                         validator: (value) {
-                          if (value!.isEmpty) return "Enter email";
-                          if (!value.contains("@")) return "Enter a valid email";
+                          if (value == null || value.isEmpty)
+                            return "Enter email";
+                          final emailRegex = RegExp(
+                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                          );
+                          if (!emailRegex.hasMatch(value))
+                            return "Enter a valid email address";
                           return null;
                         },
+                      ),
+                      _buildTextField(
+                        controller: aadhaar,
+                        label: "Aadhaar Number",
+                        icon: Icons.credit_card,
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return "Enter Aadhaar number";
+                          if (!RegExp(r'^[0-9]{12}$').hasMatch(value))
+                            return "Enter a valid 12-digit Aadhaar number";
+                          return null;
+                        },
+                      ),
+                      _buildTextField(
+                        controller: licence,
+                        label: "Driving Licence (Optional)",
+                        icon: Icons.drive_eta,
                       ),
 
                       _buildPasswordField(
@@ -94,6 +157,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           setState(() {
                             hidePassword = !hidePassword;
                           });
+                        },
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return "Enter password";
+                          if (value.length < 8)
+                            return "Password must be at least 8 characters";
+                          return null;
                         },
                       ),
 
@@ -107,8 +177,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           });
                         },
                         validator: (value) {
-                          if (value!.isEmpty) return "Confirm password";
-                          if (value != password.text) return "Passwords do not match";
+                          if (value == null || value.isEmpty)
+                            return "Confirm password";
+                          if (value != password.text)
+                            return "Passwords do not match";
                           return null;
                         },
                       ),
@@ -118,16 +190,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () {
-                            if (formKey.currentState!.validate()) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => loginscreen(),
-                                ),
-                              );
-                            }
-                          },
+                          onPressed: _register,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 15),
                             backgroundColor: Colors.blue,
@@ -189,8 +252,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       child: TextFormField(
         controller: controller,
         obscureText: hideText,
-        validator: validator ??
-            (value) => value!.isEmpty ? "Enter password" : null,
+        validator:
+            validator ?? (value) => value!.isEmpty ? "Enter password" : null,
         decoration: InputDecoration(
           prefixIcon: const Icon(Icons.lock, color: Colors.blue),
           labelText: label,
