@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ridesync/api/api_service.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:ridesync/theme/app_theme.dart';
 
 class ReplayPage extends StatefulWidget {
   @override
@@ -39,86 +41,121 @@ class _ReplayPageState extends State<ReplayPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: Colors.blue.shade700,
-        title: const Text(
-          "Admin Replies",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        backgroundColor: AppTheme.background,
+        title: Text(
+          "ADMIN REPLIES",
+          style: AppTheme.darkTheme.textTheme.headlineMedium?.copyWith(
+            fontSize: 16,
+            letterSpacing: 2,
+            fontWeight: FontWeight.w900,
+          ),
         ),
+        centerTitle: true,
         elevation: 0,
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : complaints.isEmpty
-          ? const Center(child: Text("No complaints or replies found"))
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: complaints.length,
-              itemBuilder: (context, index) {
-                var item = complaints[index];
-                return Card(
-                  elevation: 3,
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Your Complaint:",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blueGrey,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "${item['complaint']}",
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                        const Divider(height: 24),
-                        const Text(
-                          "Admin Reply:",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item['replay']?.isEmpty ?? true
-                              ? "Pending reply from admin..."
-                              : "${item['replay']}",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontStyle: item['replay']?.isEmpty ?? true
-                                ? FontStyle.italic
-                                : FontStyle.normal,
-                            color: item['replay']?.isEmpty ?? true
-                                ? Colors.grey
-                                : Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: Text(
-                            "Date: ${item['date']}",
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+              ? _buildEmptyState()
+              : _buildComplaintList(),
     );
   }
-}
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.mark_email_read_outlined, size: 64, color: AppTheme.textDim.withOpacity(0.2)),
+          const SizedBox(height: 16),
+          Text(
+            "No complaints or replies found",
+            style: TextStyle(color: AppTheme.textDim, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComplaintList() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: complaints.length,
+      itemBuilder: (context, index) {
+        var item = complaints[index];
+        bool hasReply = item['replay'] != null && item['replay'].isNotEmpty;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (hasReply ? Colors.greenAccent : Colors.orangeAccent).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      hasReply ? "RESOLVED" : "PENDING",
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: hasReply ? Colors.greenAccent : Colors.orangeAccent,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    item['date'] ?? "",
+                    style: TextStyle(color: AppTheme.textDim, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                "YOUR COMPLAINT",
+                style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "${item['complaint']}",
+                style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Divider(color: Colors.white10, height: 1),
+              ),
+              const Text(
+                "ADMIN RESPONSE",
+                style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                hasReply ? "${item['replay']}" : "Your ticket is being reviewed by our team.",
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.5,
+                  color: hasReply ? Colors.greenAccent.withOpacity(0.8) : Colors.white24,
+                  fontStyle: hasReply ? FontStyle.normal : FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ).animate().fadeIn(delay: (index * 50).ms).slideY(begin: 0.1, end: 0);
+      },
+    );
+  }
+    
+  }
+

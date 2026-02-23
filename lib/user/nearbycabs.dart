@@ -1,8 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:ridesync/api/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:dio/dio.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:ridesync/theme/app_theme.dart';
+import 'package:ridesync/utils/map_utils.dart';
+import 'bookinghistory.dart';
 
 class NearbyCabsUI extends StatefulWidget {
   const NearbyCabsUI({super.key});
@@ -17,19 +22,45 @@ class _NearbyCabsUIState extends State<NearbyCabsUI> {
 
   List<dynamic> cabs = [];
   bool isLoading = true;
+  bool viewMap = false;
+  String selectedType = "All";
+  DateTime? selectedDate;
+  TimeOfDay? selectedTime;
+  BitmapDescriptor? _carIcon;
+  GoogleMapController? _mapController;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
+    _loadMarker();
     _fetchCabs();
+    _startRefreshTimer();
   }
 
-  void _fetchCabs() async {
-    setState(() => isLoading = true);
+  void _startRefreshTimer() {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) _fetchCabs(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadMarker() async {
+    _carIcon = await MapUtils.getVehicleMarker();
+    if (mounted) setState(() {});
+  }
+
+  void _fetchCabs({bool silent = false}) async {
+    if (!silent) setState(() => isLoading = true);
     try {
       final response = await ApiService.getVehicles(
-        pickup: pickup.text.isEmpty ? null : pickup.text,
-        drop: drop.text.isEmpty ? null : drop.text,
+        pickup: pickup.text.trim().isEmpty ? null : pickup.text.trim(),
+        drop: drop.text.trim().isEmpty ? null : drop.text.trim(),
         cabType: selectedType == "All" ? null : selectedType,
       );
       if (response.statusCode == 200) {
@@ -37,66 +68,56 @@ class _NearbyCabsUIState extends State<NearbyCabsUI> {
           cabs = response.data;
           isLoading = false;
         });
+        if (viewMap && cabs.isNotEmpty && _mapController != null) {
+          _mapController?.animateCamera(
+            CameraUpdate.newLatLng(
+              LatLng(
+                double.parse(cabs.first['latitude'].toString()),
+                double.parse(cabs.first['longitude'].toString()),
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
-      setState(() {
-        isLoading = false;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Failed to fetch cabs: $e")));
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Failed to load cabs: $e")));
+      }
     }
   }
 
-  String selectedType = "All";
-
-  DateTime? selectedDate;
-  TimeOfDay? selectedTime;
-
-  // ----------- ETA Calculation -----------
   String calculateETA(String? distance) {
     if (distance == null) return "N/A";
     final double dist =
         double.tryParse(distance.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
     if (dist == 0.0) return "N/A";
-
-    // speed = 30km/h => 0.5km/min
     final int minutes = (dist / 0.5).round();
     return "$minutes mins";
   }
 
-  // ----------- Fare Calculation -----------
   double calculateFare(Map<String, dynamic> cab) {
     final double rate =
         double.tryParse(cab["per_km_rate"]?.toString() ?? "0") ?? 0.0;
     final double dist =
         double.tryParse(cab["distance_km"]?.toString() ?? "0") ?? 0.0;
-    if (rate > 0 && dist > 0) {
-      return rate * dist;
-    }
-
-    // Fallback to distance string if per_km_rate is missing
+    if (rate > 0 && dist > 0) return rate * dist;
     final String? distanceStr = cab["distance"];
     if (distanceStr == null) return 50.0;
-    final km = double.tryParse(distanceStr.replaceAll(" km", "")) ?? 1.0;
-    return km * 25;
+    final km =
+        double.tryParse(distanceStr.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 1.0;
+    return km * (rate > 0 ? rate : 25);
   }
 
-  // ----------- Call Owner -----------
   Future<void> _makeCall(String phoneNumber) async {
     final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
     if (await canLaunchUrl(launchUri)) {
       await launchUrl(launchUri);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Could not launch dialer")),
-        );
-      }
     }
   }
 
-  // ----------- Bottom Sheet -----------
   void showBookingSheet(Map<String, dynamic> cab) {
     final double fare = calculateFare(cab);
     final String eta = calculateETA(cab["distance"]);
@@ -105,54 +126,55 @@ class _NearbyCabsUIState extends State<NearbyCabsUI> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
-          return Padding(
-            padding: const EdgeInsets.all(20),
+          return Container(
+            decoration: BoxDecoration(
+              color: AppTheme.background,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(40),
+              ),
+            ),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
             child: SingleChildScrollView(
+              padding: const EdgeInsets.all(32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
-
                 children: [
                   Center(
                     child: Container(
-                      width: 40,
-                      height: 4,
+                      width: 48,
+                      height: 5,
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade400,
+                        color: Colors.white10,
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 20),
-
+                  const SizedBox(height: 32),
                   if (cab["vehicle_image"] != null) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        "http://192.168.1.5:5000${cab["vehicle_image"]}",
-                        height: 180,
+                    Hero(
+                      tag: "vehicle_${cab['id']}",
+                      child: Container(
+                        height: 200,
                         width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, e, s) => Container(
-                          height: 180,
-                          color: Colors.grey.shade200,
-                          child: const Icon(
-                            Icons.image_not_supported,
-                            size: 50,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(24),
+                          image: DecorationImage(
+                            image: NetworkImage(
+                              "${ApiService.baseUrl}${cab["vehicle_image"]}",
+                            ),
+                            fit: BoxFit.cover,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 32),
                   ],
-
-                  // Cab Name + Car
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -164,407 +186,165 @@ class _NearbyCabsUIState extends State<NearbyCabsUI> {
                               cab["owner_name"] ?? "Taxi Service",
                               style: const TextStyle(
                                 fontSize: 24,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
                               ),
                             ),
                             Text(
-                              "${cab["vehicle_class"]} - ${cab["vehicle_model"]}",
+                              "${cab["vehicle_class"]} • ${cab["vehicle_model"]}",
                               style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey.shade700,
+                                fontSize: 14,
+                                color: AppTheme.textDim,
                               ),
                             ),
                           ],
                         ),
                       ),
                       if (cab["mobile_number"] != null)
-                        CircleAvatar(
-                          backgroundColor: Colors.green,
-                          child: IconButton(
-                            icon: const Icon(Icons.call, color: Colors.white),
-                            onPressed: () =>
-                                _makeCall(cab["mobile_number"].toString()),
-                          ),
+                        _buildCircleButton(
+                          Icons.call_rounded,
+                          () => _makeCall(cab["mobile_number"].toString()),
+                          Colors.greenAccent,
                         ),
                     ],
                   ),
-
-                  const SizedBox(height: 15),
-
-                  // Detail Grid
-                  Row(
+                  const SizedBox(height: 24),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
                     children: [
-                      Expanded(
-                        child: detailTile(
-                          Icons.local_gas_station,
-                          "Fuel",
-                          cab["fuel_type"] ?? "N/A",
-                        ),
+                      _buildDetailChip(
+                        Icons.local_gas_station_rounded,
+                        "Fuel",
+                        cab["fuel_type"] ?? "N/A",
                       ),
-                      Expanded(
-                        child: detailTile(
-                          Icons.airline_seat_recline_normal,
-                          "Seats",
-                          "${cab["seating_capacity"] ?? 4}",
-                        ),
+                      _buildDetailChip(
+                        Icons.airline_seat_recline_normal_rounded,
+                        "Seats",
+                        "${cab["seating_capacity"] ?? 4}",
                       ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: detailTile(
-                          Icons.category,
-                          "Type",
-                          cab["cab_type"] ?? "N/A",
-                        ),
+                      _buildDetailChip(
+                        Icons.category_rounded,
+                        "Type",
+                        cab["cab_type"] ?? "N/A",
                       ),
-                      Expanded(
-                        child: detailTile(
-                          Icons.numbers,
-                          "Plate",
-                          cab["vehicle_no"] ?? "N/A",
-                        ),
+                      _buildDetailChip(
+                        Icons.numbers_rounded,
+                        "Plate",
+                        cab["vehicle_no"] ?? "N/A",
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 10),
-
-                  // Distance + arrival
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "Distance: ${cab["distance"] ?? 'N/A'}",
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              "Arrival: ${cab["time"] ?? 'N/A'}",
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.blue,
-                              ),
-                            ),
-                            Text(
-                              "Est. Arrival: $eta",
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const Divider(height: 30),
-
-                  // Owner Contact Info
-                  if (cab["mobile_number"] != null) ...[
-                    const Text(
-                      "Owner Details",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const CircleAvatar(child: Icon(Icons.person)),
-                      title: Text(cab["owner_name"] ?? "Owner"),
-                      subtitle: Text("Contact: ${cab["mobile_number"]}"),
-                      trailing: ElevatedButton.icon(
-                        icon: const Icon(Icons.call, size: 18),
-                        label: const Text("Call"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: () =>
-                            _makeCall(cab["mobile_number"].toString()),
-                      ),
-                    ),
-                    const Divider(height: 30),
-                  ],
-
-                  // Fare Calculation
-                  if (cab["per_km_rate"] != null &&
-                      cab["distance_km"] != null) ...[
-                    Container(
-                      margin: const EdgeInsets.symmetric(vertical: 10),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.green.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Fare Calculation",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green.shade800,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text("Distance: ${cab["distance_km"]} km"),
-                              Text("Rate: ₹${cab["per_km_rate"]}/km"),
-                            ],
-                          ),
-                          const Divider(),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                "Total Amount:",
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                "₹${(double.tryParse(cab["per_km_rate"].toString()) ?? 0) * (double.tryParse(cab["distance_km"].toString()) ?? 0)}",
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-
-                  const Divider(height: 30),
-
-                  // Date Picker
-                  ElevatedButton.icon(
+                  const SizedBox(height: 24),
+                  // Container(
+                  //   padding: const EdgeInsets.all(20),
+                  //   decoration: BoxDecoration(
+                  //     color: AppTheme.surface,
+                  //     borderRadius: BorderRadius.circular(24),
+                  //   ),
+                  //   child: Row(
+                  //     children: [
+                  //       Icon(Icons.timer_outlined, color: AppTheme.primary),
+                  //       const SizedBox(width: 16),
+                  //       Expanded(
+                  //         child: Text(
+                  //           "ETA",
+                  //           style: TextStyle(
+                  //             color: AppTheme.textDim,
+                  //             fontSize: 10,
+                  //             fontWeight: FontWeight.w900,
+                  //             letterSpacing: 1,
+                  //           ),
+                  //         ),
+                  //       ),
+                  //       Text(
+                  //         eta,
+                  //         style: const TextStyle(
+                  //           color: Colors.white,
+                  //           fontWeight: FontWeight.bold,
+                  //         ),
+                  //       ),
+                  //     ],
+                  //   ),
+                  // ),
+                  const SizedBox(height: 32),
+                  _buildPickerButton(
+                    icon: Icons.calendar_month_rounded,
+                    label: selectedDate == null
+                        ? "Select Date"
+                        : "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}",
                     onPressed: () async {
-                      final DateTime? picked = await showDatePicker(
+                      final picked = await showDatePicker(
                         context: context,
                         initialDate: DateTime.now(),
                         firstDate: DateTime.now(),
                         lastDate: DateTime(2030),
                       );
-
-                      if (picked != null) {
+                      if (picked != null)
                         setModalState(() => selectedDate = picked);
-                      }
                     },
-                    icon: const Icon(Icons.calendar_month),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade50,
-                      foregroundColor: Colors.blue,
-                      minimumSize: const Size(double.infinity, 45),
-                    ),
-                    label: Text(
-                      selectedDate == null
-                          ? "Select Booking Date"
-                          : "Date: ${selectedDate!.day}-${selectedDate!.month}-${selectedDate!.year}",
-                    ),
                   ),
-
-                  const SizedBox(height: 10),
-
-                  // Time Picker
-                  ElevatedButton.icon(
+                  const SizedBox(height: 12),
+                  _buildPickerButton(
+                    icon: Icons.access_time_rounded,
+                    label: selectedTime == null
+                        ? "Select Time"
+                        : selectedTime!.format(context),
                     onPressed: () async {
-                      final TimeOfDay? picked = await showTimePicker(
+                      final picked = await showTimePicker(
                         context: context,
                         initialTime: TimeOfDay.now(),
                       );
-
-                      if (picked != null) {
+                      if (picked != null)
                         setModalState(() => selectedTime = picked);
-                      }
                     },
-                    icon: const Icon(Icons.access_time),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade50,
-                      foregroundColor: Colors.blue,
-                      minimumSize: const Size(double.infinity, 45),
-                    ),
-                    label: Text(
-                      selectedTime == null
-                          ? "Select Booking Time"
-                          : "Time: ${selectedTime!.format(context)}",
-                    ),
                   ),
-
-                  const SizedBox(height: 20),
-
-                  // Seat Counter
-                  const Text(
-                    "Select Seats",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.remove_circle_outline,
-                          color: Colors.blue,
-                        ),
-                        onPressed: () {
-                          if (requestedSeats > 1) {
-                            setModalState(() => requestedSeats--);
-                          }
-                        },
-                      ),
-                      Text(
-                        "$requestedSeats",
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.add_circle_outline,
-                          color: Colors.blue,
-                        ),
-                        onPressed: () {
-                          final maxSeats =
-                              int.tryParse(
-                                cab["seating_capacity"]?.toString() ?? "4",
-                              ) ??
-                              4;
-                          if (requestedSeats < maxSeats) {
-                            setModalState(() => requestedSeats++);
-                          }
-                        },
-                      ),
-                      const Spacer(),
-                      Text(
-                        "Max: ${cab["seating_capacity"] ?? 4}",
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 25),
-
-                  // Fare Display
-                  Text(
-                    "Total Amount: ₹${(fare * requestedSeats).toStringAsFixed(2)}",
-                    style: const TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-
-                  const SizedBox(height: 25),
-
-                  // BOOK BUTTON
+                  const SizedBox(height: 32),
+                  // Row(
+                  //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //   children: [
+                  //     const Text(
+                  //       "TOTAL",
+                  //       style: TextStyle(
+                  //         color: Colors.white54,
+                  //         fontWeight: FontWeight.w900,
+                  //         fontSize: 10,
+                  //         letterSpacing: 1,
+                  //       ),
+                  //     ),
+                  //     Text(
+                  //       "₹${(fare * requestedSeats).toStringAsFixed(2)}",
+                  //       style: const TextStyle(
+                  //         color: Colors.greenAccent,
+                  //         fontSize: 28,
+                  //         fontWeight: FontWeight.w900,
+                  //       ),
+                  //     ),
+                  //   ],
+                  // ),
+                  const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
+                    height: 56,
                     child: ElevatedButton(
-                      onPressed: () async {
-                        if (selectedDate == null || selectedTime == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Please select date & time"),
-                            ),
-                          );
-                          return;
-                        }
-
-                        try {
-                          final prefs = await SharedPreferences.getInstance();
-                          final loginId = prefs.getInt('login_id');
-
-                          if (loginId == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  "Error: Login ID missing. Please login again.",
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-
-                          final data = {
-                            'login_id': loginId,
-                            'status': 'Pending',
-                            'vehicle_no': int.parse(
-                              cab["id"].toString(),
-                            ), // Ensure int PK
-                            'date':
-                                "${selectedDate!.year}-${selectedDate!.month.toString().padLeft(2, '0')}-${selectedDate!.day.toString().padLeft(2, '0')}",
-                            'time':
-                                "${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}",
-                            'total_amount': double.parse(
-                              (fare * requestedSeats).toString(),
-                            ),
-                            'requested_seats': requestedSeats,
-                          };
-
-                          final response = await ApiService.bookVehicle(data);
-                          if (response.statusCode == 201) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  "Booking request sent successfully!",
-                                ),
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  "Booking failed: ${response.data}",
-                                ),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          String errorMsg = "Failed to book cab: $e";
-                          if (e is DioException && e.response != null) {
-                            errorMsg = "Booking failed: ${e.response?.data}";
-                          }
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text(errorMsg)));
-                        }
-                      },
+                      onPressed: () =>
+                          _handleBooking(cab, fare, requestedSeats),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: Colors.blue,
+                        backgroundColor: AppTheme.primary,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
                       child: const Text(
-                        "Confirm Booking",
-                        style: TextStyle(fontSize: 18),
+                        "BOOK NOW",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1,
+                        ),
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 15),
                 ],
               ),
             ),
@@ -574,204 +354,499 @@ class _NearbyCabsUIState extends State<NearbyCabsUI> {
     );
   }
 
-  // ------------------------- UI LIST & FILTERS ------------------------
+  void _handleBooking(
+    Map<String, dynamic> cab,
+    double fare,
+    int requestedSeats,
+  ) async {
+    if (selectedDate == null || selectedTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a date and time")),
+      );
+      return;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('user_id');
+      if (userId == null) return;
+
+      final data = {
+        'login_id': userId,
+        'status': 'Pending',
+        'vehicle_no': int.parse(cab["id"].toString()),
+        'date':
+            "${selectedDate!.year}-${selectedDate!.month.toString().padLeft(2, '0')}-${selectedDate!.day.toString().padLeft(2, '0')}",
+        'time':
+            "${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}",
+        'total_amount': fare * requestedSeats,
+        'requested_seats': requestedSeats,
+      };
+
+      final response = await ApiService.bookVehicle(data);
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Booking request sent!"),
+            backgroundColor: Colors.greenAccent,
+          ),
+        );
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const BookingHistoryPage()),
+          );
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Booking failed: $e")));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final filteredCabs = selectedType == "All"
-        ? cabs
-        : cabs.where((cab) => cab["cab_type"] == selectedType).toList();
-
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text("Nearby Cabs"),
+        title: Text(
+          "CABS",
+          style: AppTheme.darkTheme.textTheme.headlineMedium?.copyWith(
+            fontSize: 16,
+            letterSpacing: 2,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
         centerTitle: true,
-        backgroundColor: Colors.blue,
+        backgroundColor: AppTheme.background,
+        elevation: 0,
+        actions: [
+          IconButton(
+            onPressed: () => setState(() => viewMap = !viewMap),
+            icon: Icon(
+              viewMap ? Icons.list_rounded : Icons.map_rounded,
+              color: AppTheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [
-          // -------- Search Bar --------
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: pickup,
-                    decoration: InputDecoration(
-                      hintText: "Pickup Location",
-                      prefixIcon: const Icon(
-                        Icons.location_on,
-                        color: Colors.blue,
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey.shade100,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: drop,
-                    decoration: InputDecoration(
-                      hintText: "Drop Location",
-                      prefixIcon: const Icon(Icons.flag, color: Colors.red),
-                      filled: true,
-                      fillColor: Colors.grey.shade100,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  onPressed: _fetchCabs,
-                  icon: const Icon(Icons.search, color: Colors.blue),
-                ),
-              ],
-            ),
-          ),
-
-          // -------- Filter Options --------
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: ["All", "SUV", "Hatchback", "Sedan", "MUV/MPV"].map((
-                type,
-              ) {
-                final bool isSelected = selectedType == type;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: ChoiceChip(
-                    label: Text(type),
-                    selected: isSelected,
-                    selectedColor: Colors.blue,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black,
-                    ),
-                    onSelected: (bool selected) {
-                      if (selected) {
-                        setState(() => selectedType = type);
-                        _fetchCabs();
-                      }
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-
-          const SizedBox(height: 15),
-
-          // CAB LIST
-          isLoading
-              ? const Expanded(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              : cabs.isEmpty
-              ? const Expanded(child: Center(child: Text("No Cabs Found")))
-              : Expanded(
-                  child: ListView.builder(
-                    itemCount: filteredCabs.length,
-                    itemBuilder: (context, index) {
-                      final cab = filteredCabs[index];
-
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 15,
-                          vertical: 8,
+          if (!viewMap)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildInputField(
+                          pickup,
+                          "Pickup",
+                          Icons.my_location_rounded,
                         ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildInputField(
+                          drop,
+                          "Drop",
+                          Icons.location_on_rounded,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _fetchCabs,
+                      icon: const Icon(Icons.search_rounded, size: 18),
+                      label: const Text(
+                        "SEARCH",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1,
+                          fontSize: 12,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius: BorderRadius.circular(14),
                         ),
-                        elevation: 4,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(15),
-                          leading: CircleAvatar(
-                            backgroundColor: Colors.blue.shade100,
-                            radius: 28,
-                            child: const Icon(
-                              Icons.local_taxi,
-                              color: Colors.blue,
-                              size: 30,
-                            ),
-                          ),
-                          title: Text(
-                            cab["owner_name"] ?? "Taxi",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 17,
-                            ),
-                          ),
-                          subtitle: Text(
-                            "${cab["vehicle_model"]} • ${cab["vehicle_no"]}",
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                          onTap: () => showBookingSheet(cab),
-                        ),
-                      );
-                    },
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          if (!viewMap) _buildFilterBar(),
+          Expanded(
+            child: isLoading
+                ? Center(
+                    child: CircularProgressIndicator(color: AppTheme.primary),
+                  )
+                : viewMap
+                ? _buildMapView()
+                : cabs.isEmpty
+                ? _buildEmptyState()
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    itemCount: cabs.length,
+                    itemBuilder: (context, index) =>
+                        _buildCabCard(cabs[index], index),
+                  ),
+          ),
         ],
       ),
     );
   }
 
-  Widget filterChip(String label) {
-    bool selected = selectedType == label;
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 10),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selected,
-        selectedColor: Colors.blue,
-        backgroundColor: Colors.grey.shade300,
-        labelStyle: TextStyle(
-          color: selected ? Colors.white : Colors.black,
-          fontWeight: FontWeight.w600,
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        onSelected: (val) {
-          setState(() {
-            selectedType = label;
-          });
-        },
+  Widget _buildFilterBar() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.only(left: 24, bottom: 24),
+      child: Row(
+        children: ["All", "SUV", "Hatchback", "Sedan", "MUV/MPV"].map((type) {
+          final isSelected = selectedType == type;
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: GestureDetector(
+              onTap: () {
+                setState(() => selectedType = type);
+                _fetchCabs();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppTheme.primary : AppTheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected ? Colors.transparent : Colors.white10,
+                  ),
+                ),
+                child: Text(
+                  type.toUpperCase(),
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : AppTheme.textDim,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 10,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
 
-  Widget detailTile(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+  Widget _buildInputField(
+    TextEditingController controller,
+    String hint,
+    IconData icon,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: AppTheme.textDim, fontSize: 13),
+          prefixIcon: Icon(icon, color: AppTheme.primary, size: 18),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCabCard(Map<String, dynamic> cab, int index) {
+    final hasRoute =
+        (cab['pickup_location'] != null &&
+            cab['pickup_location'].toString().isNotEmpty) ||
+        (cab['drop_location'] != null &&
+            cab['drop_location'].toString().isNotEmpty);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: InkWell(
+        onTap: () => showBookingSheet(cab),
+        borderRadius: BorderRadius.circular(28),
+        child: Column(
+          children: [
+            if (cab["vehicle_image"] != null)
+              Container(
+                height: 160,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(28),
+                  ),
+                  image: DecorationImage(
+                    image: NetworkImage(
+                      "${ApiService.baseUrl}${cab["vehicle_image"]}",
+                    ),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        cab["owner_name"] ?? "Taxi",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      // Text(
+                      //   "₹${calculateFare(cab).toInt()}",
+                      //   style: const TextStyle(
+                      //     color: Colors.greenAccent,
+                      //     fontSize: 20,
+                      //     fontWeight: FontWeight.w900,
+                      //   ),
+                      // ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "${cab["vehicle_model"]}",
+                    style: TextStyle(color: AppTheme.textDim, fontSize: 13),
+                  ),
+                  if (hasRoute) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.07),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppTheme.primary.withOpacity(0.15),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.route_rounded,
+                            color: AppTheme.primary,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "${cab['pickup_location'] ?? '?'}  →  ${cab['drop_location'] ?? '?'}",
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.timer_outlined,
+                        size: 14,
+                        color: AppTheme.textDim,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        calculateETA(cab["distance"]),
+                        style: TextStyle(color: AppTheme.textDim, fontSize: 12),
+                      ),
+                      const SizedBox(width: 16),
+                      Icon(
+                        Icons.airline_seat_recline_normal_rounded,
+                        size: 14,
+                        color: AppTheme.textDim,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        "${cab["seating_capacity"] ?? 4}",
+                        style: TextStyle(color: AppTheme.textDim, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: (index * 50).ms).slideY(begin: 0.1, end: 0);
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Text("No cabs found", style: TextStyle(color: AppTheme.textDim)),
+    );
+  }
+
+  Widget _buildDetailChip(IconData icon, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 20, color: Colors.blue.shade700),
+          Icon(icon, color: AppTheme.primary, size: 16),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                style: TextStyle(
+                  color: AppTheme.textDim,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
               ),
               Text(
                 value,
                 style: const TextStyle(
-                  fontSize: 14,
+                  color: Colors.white,
                   fontWeight: FontWeight.bold,
+                  fontSize: 12,
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMapView() {
+    Set<Marker> markers = cabs
+        .where((cab) => cab['latitude'] != null && cab['longitude'] != null)
+        .map((cab) {
+          return Marker(
+            markerId: MarkerId(cab['id'].toString()),
+            position: LatLng(
+              double.parse(cab['latitude'].toString()),
+              double.parse(cab['longitude'].toString()),
+            ),
+            icon: _carIcon ?? BitmapDescriptor.defaultMarker,
+            infoWindow: InfoWindow(
+              title: cab['owner_name'],
+              snippet:
+                  "${cab['vehicle_model']} • ₹${calculateFare(cab).toInt()}",
+              onTap: () => showBookingSheet(cab),
+            ),
+          );
+        })
+        .toSet();
+
+    return GoogleMap(
+      initialCameraPosition: CameraPosition(
+        target: markers.isNotEmpty
+            ? markers.first.position
+            : const LatLng(10.8505, 76.2711),
+        zoom: 12,
+      ),
+      markers: markers,
+      onMapCreated: (controller) {
+        _mapController = controller;
+        if (markers.isNotEmpty) {
+          _mapController!.animateCamera(
+            CameraUpdate.newLatLng(markers.first.position),
+          );
+        }
+      },
+      myLocationEnabled: true,
+      myLocationButtonEnabled: true,
+      zoomControlsEnabled: false,
+      mapType: MapType.normal,
+    );
+  }
+
+  Widget _buildCircleButton(
+    IconData icon,
+    VoidCallback onPressed,
+    Color color,
+  ) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: color, size: 20),
+      ),
+    );
+  }
+
+  Widget _buildPickerButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: AppTheme.primary, size: 20),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

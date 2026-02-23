@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:ridesync/theme/app_theme.dart';
 import 'package:ridesync/user/login.dart';
 import 'package:ridesync/api/api_service.dart';
 
@@ -26,7 +28,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     if (formKey.currentState!.validate()) {
       try {
         final data = {
-          'username': email.text, // Using email as username
+          'username': email.text,
           'password': password.text,
           'usertype': 'user',
           'name': name.text,
@@ -39,18 +41,30 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
         final response = await ApiService.register(data);
         if (response.statusCode == 201) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Registration Successful!")),
-          );
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const loginscreen()),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Account created successfully! Welcome aboard."),
+                backgroundColor: AppTheme.secondary,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const loginscreen()),
+            );
+          }
         }
       } catch (e) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Registration Failed: $e")));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Registration Error: $e"),
+              backgroundColor: AppTheme.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     }
   }
@@ -58,215 +72,206 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(gradient: AppTheme.darkGradient),
           ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            child: Card(
-              elevation: 10,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 30,
-                ),
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    children: [
-                      const Text(
-                        "Create Account",
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1976D2),
+          Positioned(
+            bottom: -100,
+            left: -100,
+            child:
+                Container(
+                      width: 300,
+                      height: 300,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.primary.withOpacity(0.05),
+                      ),
+                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .scale(duration: 4.seconds, end: const Offset(1.2, 1.2)),
+          ),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 30),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ).animate().fadeIn().slideX(begin: -0.5, end: 0),
+
+                    const SizedBox(height: 20),
+
+                    Text(
+                          "Sign Up",
+                          style: AppTheme.darkTheme.textTheme.displayLarge,
+                        )
+                        .animate()
+                        .fadeIn(duration: 600.ms)
+                        .slideY(begin: 0.2, end: 0),
+
+                    Text(
+                      "Fill in your details below",
+                      style: AppTheme.darkTheme.textTheme.bodyMedium,
+                    ).animate().fadeIn(delay: 200.ms),
+
+                    const SizedBox(height: 40),
+
+                    _buildSectionHeader("PERSONAL INFO"),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      name,
+                      "Full Name",
+                      Icons.person_outline_rounded,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      phone,
+                      "Phone Number",
+                      Icons.phone_android_rounded,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      email,
+                      "Email",
+                      Icons.alternate_email_rounded,
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      aadhaar,
+                      "Aadhaar Number",
+                      Icons.badge_outlined,
+                      keyboardType: TextInputType.number,
+                    ),
+
+                    const SizedBox(height: 32),
+                    _buildSectionHeader("DOCUMENTS"),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      licence,
+                      "Driving Licence",
+                      Icons.drive_eta_outlined,
+                      isRequired: false,
+                    ),
+
+                    const SizedBox(height: 32),
+                    _buildSectionHeader("SECURITY"),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      password,
+                      "Password",
+                      Icons.lock_outline_rounded,
+                      isPassword: true,
+                      isObscured: hidePassword,
+                      onToggle: () =>
+                          setState(() => hidePassword = !hidePassword),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      cpassword,
+                      "Confirm Password",
+                      Icons.lock_reset_rounded,
+                      isPassword: true,
+                      isObscured: hideCPassword,
+                      onToggle: () =>
+                          setState(() => hideCPassword = !hideCPassword),
+                      validator: (val) {
+                        if (val != password.text) return "Keys do not match";
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 48),
+
+                    ElevatedButton(
+                      onPressed: _register,
+                      child: const Text("REGISTER"),
+                    ).animate().fadeIn(delay: 400.ms).scale(),
+
+                    const SizedBox(height: 24),
+                    Center(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          "Already have an account? Login",
+                          style: AppTheme.darkTheme.textTheme.bodyMedium
+                              ?.copyWith(
+                                color: AppTheme.primary,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
+                              ),
                         ),
                       ),
-                      const SizedBox(height: 20),
-
-                      _buildTextField(
-                        controller: name,
-                        label: "Full Name",
-                        icon: Icons.person,
-                        validator: (value) =>
-                            value!.isEmpty ? "Enter your name" : null,
-                      ),
-
-                      _buildTextField(
-                        controller: phone,
-                        label: "Mobile Number",
-                        icon: Icons.phone,
-                        keyboardType: TextInputType.phone,
-                        validator: (value) {
-                          if (value!.isEmpty) return "Enter your phone number";
-                          if (value.length != 10)
-                            return "Enter valid 10-digit number";
-                          return null;
-                        },
-                      ),
-
-                      _buildTextField(
-                        controller: email,
-                        label: "Email",
-                        icon: Icons.email,
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return "Enter email";
-                          final emailRegex = RegExp(
-                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                          );
-                          if (!emailRegex.hasMatch(value))
-                            return "Enter a valid email address";
-                          return null;
-                        },
-                      ),
-                      _buildTextField(
-                        controller: aadhaar,
-                        label: "Aadhaar Number",
-                        icon: Icons.credit_card,
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return "Enter Aadhaar number";
-                          if (!RegExp(r'^[0-9]{12}$').hasMatch(value))
-                            return "Enter a valid 12-digit Aadhaar number";
-                          return null;
-                        },
-                      ),
-                      _buildTextField(
-                        controller: licence,
-                        label: "Driving Licence (Optional)",
-                        icon: Icons.drive_eta,
-                      ),
-
-                      _buildPasswordField(
-                        controller: password,
-                        label: "Password",
-                        hideText: hidePassword,
-                        toggle: () {
-                          setState(() {
-                            hidePassword = !hidePassword;
-                          });
-                        },
-                        validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return "Enter password";
-                          if (value.length < 8)
-                            return "Password must be at least 8 characters";
-                          return null;
-                        },
-                      ),
-
-                      _buildPasswordField(
-                        controller: cpassword,
-                        label: "Confirm Password",
-                        hideText: hideCPassword,
-                        toggle: () {
-                          setState(() {
-                            hideCPassword = !hideCPassword;
-                          });
-                        },
-                        validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return "Confirm password";
-                          if (value != password.text)
-                            return "Passwords do not match";
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _register,
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 15),
-                            backgroundColor: Colors.blue,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            "Register",
-                            style: TextStyle(fontSize: 18),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 15),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  // --- CUSTOM UI FIELDS ---
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: AppTheme.darkTheme.textTheme.bodySmall?.copyWith(
+        color: AppTheme.primary,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 2,
+      ),
+    ).animate().fadeIn();
+  }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
+  Widget _buildField(
+    TextEditingController controller,
+    String hint,
+    IconData icon, {
     TextInputType keyboardType = TextInputType.text,
+    bool isPassword = false,
+    bool isObscured = false,
+    VoidCallback? onToggle,
+    bool isRequired = true,
     String? Function(String?)? validator,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: TextFormField(
-        controller: controller,
-        validator: validator,
-        keyboardType: keyboardType,
-        decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: Colors.blue),
-          labelText: label,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+    return TextFormField(
+      controller: controller,
+      obscureText: isObscured,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: Icon(icon, size: 20),
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(
+                  isObscured
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                  size: 20,
+                ),
+                onPressed: onToggle,
+              )
+            : null,
       ),
-    );
-  }
-
-  Widget _buildPasswordField({
-    required TextEditingController controller,
-    required String label,
-    required bool hideText,
-    required VoidCallback toggle,
-    String? Function(String?)? validator,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: TextFormField(
-        controller: controller,
-        obscureText: hideText,
-        validator:
-            validator ?? (value) => value!.isEmpty ? "Enter password" : null,
-        decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.lock, color: Colors.blue),
-          labelText: label,
-          suffixIcon: IconButton(
-            icon: Icon(
-              hideText ? Icons.visibility_off : Icons.visibility,
-              color: Colors.blue,
-            ),
-            onPressed: toggle,
-          ),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      ),
-    );
+      validator:
+          validator ??
+          (val) {
+            if (isRequired && (val == null || val.isEmpty))
+              return "Required field";
+            return null;
+          },
+    ).animate().fadeIn(duration: 400.ms).slideX(begin: 0.1, end: 0);
   }
 }

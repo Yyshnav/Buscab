@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:ridesync/theme/app_theme.dart';
 import 'package:ridesync/user/Registration.dart';
-import 'package:ridesync/user/busdetails.dart';
+
 import 'package:ridesync/user/profile.dart';
 import 'package:ridesync/vehicle%20owner/RegistrationOwner.dart';
 import 'package:ridesync/vehicle%20owner/complaint.dart';
@@ -8,16 +9,7 @@ import 'package:ridesync/vehicle%20owner/feedback.dart';
 import 'package:ridesync/user/home.dart';
 import 'package:ridesync/user/liftservices.dart';
 import 'package:ridesync/user/login.dart';
-import 'package:ridesync/user/nearbycabs.dart';
-import 'package:ridesync/user/replay.dart';
-import 'package:ridesync/user/sendcomplaint.dart';
-import 'package:ridesync/vehicle%20owner/bookingmanagement.dart';
-import 'package:ridesync/vehicle%20owner/home.dart';
-import 'package:ridesync/vehicle%20owner/managevehicle.dart';
-import 'package:ridesync/vehicle%20owner/profile.dart';
-import 'package:ridesync/vehicle%20owner/viewbookinghistory.dart';
-import 'package:ridesync/user/viewfeedback.dart';
-import 'package:ridesync/vehicle%20owner/viewreplay.dart';
+
 
 void main() {
   runApp(const MyApp());
@@ -31,25 +23,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
+      title: 'CabSharing',
+      theme: AppTheme.darkTheme,
       home: loginscreen(),
     );
   }

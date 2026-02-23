@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ridesync/api/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
-
+import 'dart:ui';
 import 'package:ridesync/user/login.dart';
+import 'package:ridesync/theme/app_theme.dart';
 
 class UserProfilePage extends StatefulWidget {
+  const UserProfilePage({super.key});
+
   @override
   State<UserProfilePage> createState() => _UserProfilePageState();
 }
@@ -14,57 +18,19 @@ class UserProfilePage extends StatefulWidget {
 class _UserProfilePageState extends State<UserProfilePage> {
   final _formKey = GlobalKey<FormState>();
 
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Logout"),
-        content: const Text("Are you sure you want to logout?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () => _logout(),
-            child: const Text("Logout", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const loginscreen()),
-        (route) => false,
-      );
-    }
-  }
-
-  // Profile Info
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _licenseController = TextEditingController();
   final _adharController = TextEditingController();
+  final List<TextEditingController> _vehicleControllers = [
+    TextEditingController(),
+  ];
 
-  // Multiple vehicles
-  List<TextEditingController> _vehicleControllers = [TextEditingController()];
-
-  // ID Proof
   String idProofType = "Aadhaar Card";
   bool idProofUploaded = false;
-
-  // Profile image
   File? profileImageFile;
   final ImagePicker _picker = ImagePicker();
-
-  // Loading state
   bool isLoading = true;
   int? currentLoginId;
 
@@ -75,26 +41,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<void> _loadUserProfile() async {
-    print('DEBUG: Starting to load user profile...');
     try {
       final prefs = await SharedPreferences.getInstance();
       currentLoginId = prefs.getInt('login_id');
-
-      print(
-        'DEBUG: Retrieved login_id from SharedPreferences: $currentLoginId',
-      );
-
       if (currentLoginId != null) {
-        print('DEBUG: Calling getUserProfile API with ID: $currentLoginId');
         final response = await ApiService.getUserProfile(currentLoginId!);
-
-        print('DEBUG: API Response Status: ${response.statusCode}');
-        print('DEBUG: API Response Data: ${response.data}');
-
         if (response.statusCode == 200) {
           final userData = response.data;
-          print('DEBUG: User data received: $userData');
-
           setState(() {
             _nameController.text = (userData['name'] ?? '').toString();
             _emailController.text = (userData['email'] ?? '').toString();
@@ -104,104 +57,25 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 .toString();
             _adharController.text = (userData['aadhaar_number'] ?? '')
                 .toString();
-
-            // Handle vehicle number
             final vehicleNo = userData['Vehicle_no'];
             if (vehicleNo != null && vehicleNo.toString().isNotEmpty) {
               _vehicleControllers[0].text = vehicleNo.toString();
             }
-
             isLoading = false;
           });
-
-          print('DEBUG: Profile data loaded successfully');
         } else {
-          print('DEBUG: API returned non-200 status: ${response.statusCode}');
-          setState(() {
-            isLoading = false;
-          });
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text("Error: ${response.data}")));
-          }
+          setState(() => isLoading = false);
         }
       } else {
-        print('DEBUG: No login_id found in SharedPreferences');
-        setState(() {
-          isLoading = false;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please login to view profile")),
-          );
-        }
+        setState(() => isLoading = false);
       }
     } catch (e) {
-      print('DEBUG: Exception in _loadUserProfile: $e');
-      print('DEBUG: Exception stack trace: ${StackTrace.current}');
-      setState(() {
-        isLoading = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error loading profile: $e")));
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _licenseController.dispose();
-    _adharController.dispose();
-    for (var c in _vehicleControllers) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  // Pick profile image
-  void _pickProfileImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() {
-        profileImageFile = File(image.path);
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Profile photo uploaded")));
-    }
-  }
-
-  void _addVehicleField() {
-    setState(() {
-      _vehicleControllers.add(TextEditingController());
-    });
-  }
-
-  void _removeVehicleField(int index) {
-    if (_vehicleControllers.length > 1) {
-      _vehicleControllers[index].dispose();
-      setState(() {
-        _vehicleControllers.removeAt(index);
-      });
+      setState(() => isLoading = false);
     }
   }
 
   Future<void> _submitProfile() async {
     if (!_formKey.currentState!.validate()) return;
-
-    if (currentLoginId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please login to update profile")),
-      );
-      return;
-    }
-
     try {
       final data = {
         'name': _nameController.text,
@@ -213,266 +87,312 @@ class _UserProfilePageState extends State<UserProfilePage> {
             ? _vehicleControllers[0].text
             : '',
       };
-
-      print('DEBUG: Saving profile data: $data');
-      print('DEBUG: Login ID: $currentLoginId');
-
       final response = await ApiService.updateUserProfile(
         currentLoginId!,
         data,
       );
-
-      print('DEBUG: Response status: ${response.statusCode}');
-      print('DEBUG: Response data: ${response.data}');
-
       if (response.statusCode == 200) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("Profile updated successfully"),
-              backgroundColor: Colors.green,
+              content: Text("Profile details synchronized"),
+              backgroundColor: AppTheme.secondary,
+              behavior: SnackBarBehavior.floating,
             ),
           );
-          // Reload profile to confirm changes
           _loadUserProfile();
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Failed to update: ${response.data}"),
-              backgroundColor: Colors.red,
-            ),
-          );
         }
       }
     } catch (e) {
-      print('DEBUG: Error saving profile: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Failed to update profile: $e"),
-            backgroundColor: Colors.red,
+            content: Text("Sync failed: $e"),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.blue.shade700,
-        centerTitle: true,
-        title: const Text(
-          "User Profile",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () => _showLogoutDialog(),
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: AlertDialog(
+          backgroundColor: AppTheme.surface.withOpacity(0.9),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
+            side: BorderSide(color: Colors.white.withOpacity(0.1)),
           ),
-        ],
-      ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    // Profile Avatar
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundImage: profileImageFile != null
-                          ? FileImage(profileImageFile!)
-                          : null,
-                      child: profileImageFile == null
-                          ? const Icon(
-                              Icons.person,
-                              size: 60,
-                              color: Colors.white,
-                            )
-                          : null,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text("Upload profile photo"),
-                    const SizedBox(height: 6),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.upload_file),
-                      label: Text(
-                        profileImageFile != null
-                            ? "Change Profile Photo"
-                            : "Upload Profile Photo",
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade700,
-                      ),
-                      onPressed: _pickProfileImage,
-                    ),
-                    const SizedBox(height: 20),
-
-                    _buildTextField("Name", _nameController),
-                    _buildTextField(
-                      "Email",
-                      _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    _buildTextField(
-                      "Phone",
-                      _phoneController,
-                      keyboardType: TextInputType.phone,
-                    ),
-                    _buildTextField(
-                      "Driving Licence Number",
-                      _licenseController,
-                    ),
-
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Vehicle Numbers",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        ..._vehicleControllers.asMap().entries.map((entry) {
-                          int idx = entry.key;
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: _buildTextField(
-                                  "Vehicle Number ${idx + 1}",
-                                  entry.value,
-                                ),
-                              ),
-                              if (_vehicleControllers.length > 1)
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.remove_circle,
-                                    color: Colors.red,
-                                  ),
-                                  onPressed: () => _removeVehicleField(idx),
-                                ),
-                            ],
-                          );
-                        }),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            icon: const Icon(Icons.add),
-                            label: const Text("Add Vehicle"),
-                            onPressed: _addVehicleField,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    _buildTextField(
-                      "Aadhaar Number",
-                      _adharController,
-                      keyboardType: TextInputType.number,
-                      isRequired: true,
-                    ),
-
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: idProofType,
-                      decoration: const InputDecoration(
-                        labelText: "Select ID Proof Type",
-                        border: OutlineInputBorder(),
-                      ),
-                      items:
-                          const [
-                                "Aadhaar Card",
-                                "Driving Licence",
-                                "Passport",
-                                "Voter ID",
-                              ]
-                              .map(
-                                (e) =>
-                                    DropdownMenuItem(value: e, child: Text(e)),
-                              )
-                              .toList(),
-                      onChanged: (v) {
-                        if (v != null) {
-                          setState(() {
-                            idProofType = v;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 6),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.upload_file),
-                      label: Text(
-                        idProofUploaded ? "$idProofType ✅" : idProofType,
-                      ), // just show label, no image
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade700,
-                      ),
-                      onPressed: () async {
-                        // pick ID proof but do nothing else with image
-                        final XFile? image = await _picker.pickImage(
-                          source: ImageSource.gallery,
-                        );
-                        if (image != null) {
-                          setState(() {
-                            idProofUploaded = true;
-                          });
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("$idProofType uploaded")),
-                          );
-                        }
-                      },
-                    ),
-
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade700,
-                        ),
-                        onPressed: _submitProfile,
-                        child: const Text(
-                          "Save Profile",
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ),
-                  ],
+          title: Text(
+            "Terminate Session?",
+            style: AppTheme.darkTheme.textTheme.titleLarge,
+          ),
+          content: Text(
+            "Are you sure you want to sign out? Your session data will be cleared.",
+            style: AppTheme.darkTheme.textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("CANCEL", style: TextStyle(color: AppTheme.textDim)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.error,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
                 ),
               ),
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.clear();
+                if (mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const loginscreen(),
+                    ),
+                    (route) => false,
+                  );
+                }
+              },
+              child: const Text(
+                "LOGOUT",
+                style: TextStyle(color: Colors.white),
+              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildTextField(
-    String label,
-    TextEditingController controller, {
-    TextInputType keyboardType = TextInputType.text,
-    bool isRequired = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        validator: (value) {
-          if (isRequired && (value == null || value.isEmpty)) {
-            return "Please enter $label";
-          }
-          return null;
-        },
-        decoration: InputDecoration(
-          labelText: isRequired ? "$label (Required)" : label,
-          border: const OutlineInputBorder(),
-        ),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 280,
+            floating: false,
+            pinned: true,
+            backgroundColor: AppTheme.background,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.logout_rounded, color: AppTheme.error),
+                onPressed: _showLogoutDialog,
+              ),
+              const SizedBox(width: 8),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              background: Stack(
+                children: [
+                  Container(
+                    decoration: const BoxDecoration(
+                      gradient: AppTheme.darkGradient,
+                    ),
+                  ),
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 40),
+                        Stack(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.1),
+                                  width: 2,
+                                ),
+                              ),
+                              child: Hero(
+                                tag: 'profile_pic',
+                                child: CircleAvatar(
+                                  radius: 60,
+                                  backgroundColor: AppTheme.surface,
+                                  backgroundImage: profileImageFile != null
+                                      ? FileImage(profileImageFile!)
+                                      : null,
+                                  child: profileImageFile == null
+                                      ? const Icon(
+                                          Icons.person_rounded,
+                                          size: 60,
+                                          color: Colors.white24,
+                                        )
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            // Positioned(
+                            //   bottom: 0,
+                            //   right: 0,
+                            //   child: GestureDetector(
+                            //     onTap: () async {
+                            //       final XFile? image = await _picker.pickImage(
+                            //         source: ImageSource.gallery,
+                            //       );
+                            //       if (image != null)
+                            //         setState(
+                            //           () => profileImageFile = File(image.path),
+                            //         );
+                            //     },
+                            //     child: Container(
+                            //       padding: const EdgeInsets.all(10),
+                            //       decoration: const BoxDecoration(
+                            //         color: AppTheme.primary,
+                            //         shape: BoxShape.circle,
+                            //       ),
+                            //       child: const Icon(
+                            //         Icons.camera_alt_rounded,
+                            //         color: Colors.white,
+                            //         size: 20,
+                            //       ),
+                            //     ),
+                            //   ),
+                            // ),
+                          ],
+                        ).animate().scale(
+                          duration: 600.ms,
+                          curve: Curves.bounceInOut,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _nameController.text.toUpperCase(),
+                          style: AppTheme.darkTheme.textTheme.titleLarge
+                              ?.copyWith(letterSpacing: 2),
+                        ).animate().fadeIn(delay: 200.ms),
+                        Text(
+                          "Network ID: ${currentLoginId ?? '---'}",
+                          style: AppTheme.darkTheme.textTheme.bodySmall,
+                        ).animate().fadeIn(delay: 300.ms),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: isLoading
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(100),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionHeader("IDENTITY CORE"),
+                          const SizedBox(height: 16),
+                          _buildField(
+                            _nameController,
+                            "Full Identity Label",
+                            Icons.badge_outlined,
+                          ),
+                          _buildField(
+                            _emailController,
+                            "Digital Communication",
+                            Icons.alternate_email_rounded,
+                            type: TextInputType.emailAddress,
+                          ),
+                          _buildField(
+                            _phoneController,
+                            "Contact Synchrony",
+                            Icons.phone_android_rounded,
+                            type: TextInputType.phone,
+                          ),
+
+                          const SizedBox(height: 32),
+                          _buildSectionHeader("VERIFICATION PROTOCOL"),
+                          const SizedBox(height: 16),
+                          _buildField(
+                            _adharController,
+                            "Governing ID (Aadhaar)",
+                            Icons.fingerprint_rounded,
+                            type: TextInputType.number,
+                          ),
+                          _buildField(
+                            _licenseController,
+                            "Transit Authority Permit",
+                            Icons.drive_eta_outlined,
+                          ),
+
+                          const SizedBox(height: 32),
+                          _buildSectionHeader("ASSET REGISTRY"),
+                          const SizedBox(height: 16),
+                          ..._vehicleControllers.asMap().entries.map((entry) {
+                            return _buildField(
+                              entry.value,
+                              "Primary Transit Unit",
+                              Icons.local_shipping_outlined,
+                            );
+                          }),
+
+                          const SizedBox(height: 48),
+                          ElevatedButton(
+                            onPressed: _submitProfile,
+                            child: const Text("SYNCHRONIZE CORE DATA"),
+                          ).animate().fadeIn(delay: 400.ms).scale(),
+                          const SizedBox(height: 40),
+                        ],
+                      ),
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: AppTheme.darkTheme.textTheme.bodySmall?.copyWith(
+        color: AppTheme.primary,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 2,
+      ),
+    ).animate().fadeIn();
+  }
+
+  Widget _buildField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    TextInputType type = TextInputType.text,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: type,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, size: 20),
+        ),
+      ),
+    ).animate().fadeIn().slideX(begin: 0.05, end: 0);
   }
 }

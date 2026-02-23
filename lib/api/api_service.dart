@@ -1,9 +1,10 @@
 import 'package:dio/dio.dart';
 
 class ApiService {
+  static const String baseUrl = 'http://192.168.1.50:5000';
   static final Dio _dio = Dio(
     BaseOptions(
-      baseUrl: 'http://192.168.1.38:5000/',
+      baseUrl: '$baseUrl/',
       connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 30),
     ),
@@ -118,31 +119,6 @@ class ApiService {
     }
   }
 
-  // Bus Management
-  static Future<Response> getAllBuses() async {
-    try {
-      return await _dio.get('ViewBusAPI');
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  static Future<Response> addBus(dynamic data) async {
-    try {
-      return await _dio.post('AddBusAPI', data: data);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  static Future<Response> deleteBus(int id) async {
-    try {
-      return await _dio.get('DeleteBusAPI/$id');
-    } catch (e) {
-      rethrow;
-    }
-  }
-
   // Complaints & Feedback
   static Future<Response> submitComplaint(dynamic data) async {
     try {
@@ -176,9 +152,12 @@ class ApiService {
     }
   }
 
-  static Future<Response> getNotifications() async {
+  static Future<Response> getNotifications({int? loginId}) async {
     try {
-      return await _dio.get('NotificationAPI');
+      String url = loginId != null
+          ? 'NotificationAPI/$loginId'
+          : 'NotificationAPI';
+      return await _dio.get(url);
     } catch (e) {
       rethrow;
     }
@@ -188,6 +167,14 @@ class ApiService {
   static Future<Response> addVehicle(dynamic data) async {
     try {
       return await _dio.post('VehicleAPI', data: data);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  static Future<Response> deleteVehicle(int id) async {
+    try {
+      return await _dio.delete('DeleteVehicleAPI/$id');
     } catch (e) {
       rethrow;
     }
@@ -229,11 +216,18 @@ class ApiService {
     }
   }
 
-  static Future<Response> getLifts({int? userId, int? excludeUserId}) async {
+  static Future<Response> getLifts({
+    int? userId,
+    int? excludeUserId,
+    String? pickup,
+    String? drop,
+  }) async {
     try {
       Map<String, dynamic> queryParams = {};
       if (userId != null) queryParams['user_id'] = userId;
       if (excludeUserId != null) queryParams['exclude_user_id'] = excludeUserId;
+      if (pickup != null && pickup.isNotEmpty) queryParams['pickup'] = pickup;
+      if (drop != null && drop.isNotEmpty) queryParams['drop'] = drop;
 
       return await _dio.get('LiftAPI', queryParameters: queryParams);
     } catch (e) {
@@ -256,6 +250,24 @@ class ApiService {
       rethrow;
     }
   }
+
+  /*
+  static Future<Response> getAllBuses() async {
+    try {
+      return await _dio.get('BusAPI');
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  static Future<Response> getBus(int busId) async {
+    try {
+      return await _dio.get('BusAPI/$busId');
+    } catch (e) {
+      rethrow;
+    }
+  }
+  */
 
   // Lift Request API
   static Future<Response> requestLift(dynamic data) async {
@@ -291,6 +303,31 @@ class ApiService {
         'UpdateLiftRequestStatusAPI',
         data: {'request_id': requestId, 'status': status},
       );
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Location Tracking
+  static Future<Response> updateLocation(dynamic data) async {
+    try {
+      return await _dio.post('UpdateLocationAPI/', data: data);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  static Future<Response> getVehicleLocation(int vehicleId) async {
+    try {
+      return await _dio.get('GetLocationAPI/$vehicleId/');
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  static Future<Response> processPayment(dynamic data) async {
+    try {
+      return await _dio.post('PaymentAPI/', data: data);
     } catch (e) {
       rethrow;
     }
